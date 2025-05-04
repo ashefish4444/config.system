@@ -1,93 +1,117 @@
 #!/usr/bin/bash
 #
-installDotnet="n";
-proceed="y"
-ver="8"
-list=()
-shouldExist=0
-#
-ckcd() {
-	list=()
-	for cmd in $@
- 	do
-		if [ $shouldExist -ne 0 ] && ! command -v $cmd $> /dev/null
-	 	then
-	  		echo "'$cmd' is not installed but required."
-     			proceed="n"
-	    	elif [ $shouldExist -eq 0 ] && !! command -v $cmd $> /dev/null
-	 	then
-	  		echo "'$cmd' is already installed but required."
-     			proceed="e"
-	    	fi
-     	done
+instalIndex=0
+debianIndex=0
+separators=(
+	"############################################################"
+	"============================================================"
+	"------------------------------------------------------------"
+)
+messages=()
+messagesSub=()
+message=""
+folder="./.temp/af4-config-system"
+# helpers
+showSeparator() {
+	index=$(($1+0))
+	echo "${separators[$index]}"
 }
-## admin
-adminAppInstall () {
-    app=$@
-	if [ "$proceed" == "y" ]; then 
-		read -p "Do u want to continue installing '${app[@]}': " proceed
-		if [ "$proceed" == "y" ]; then
-			sudo apt install ${app[@]}
-   			sudo apt update
-      			source ~/.bashrc
-		fi	
-	fi	
-}
-userAppInstall () {
-	app=$@
-	if [ "$proceed" == "y" ]; then 
-		echo "Installing ${app[@]}"
-		`${app[@]}`
-  		source ~/.bashrc
-		read -p "Continue: " proceed
-	fi	
-}
-#
-adminInstall () {
-	adminAppInstall git
-	adminAppInstall curl
-	adminAppInstall snap
-	sudo snap install --classic code
-	sudo apt update
- 	read -p "Do u want to install ASP.NET Core (y/n): ": installDotnet
-  	while [ "$installDotnet" != "y" ] && [ "$installDotnet" != "n" ]
+displayMessage() {
+    showSeparator 0
+	echo "Configuring system."
+    showSeparator 2
+    for m in ${messages[@]}
    	do
-    	read -p "Invalid answer. Do u want to install ASP.NET Core (y/n): ": reply
+		showSeparator 1
+		echo "$m"
 	done
-	if [ "$installDotnet" == "y" ]
-	then
-		adminAppInstall -y dotnet-sdk-$ver.0
-		adminAppInstall -y aspnetcore-runtime-$ver.0
-	fi
 }
-##
-userInstall () {
-    #
-    # node
-    userAppInstall curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash
-    userAppInstall nvm install node
-    #pnpm
-    userAppInstall curl -fsSL https://get.pnpm.io/install.sh | sh -
-    # dontnet tools
-    if [ "$installDotnet" == "y" ]
-    then
-    	userAppInstall dotnet tool update --global dotnet-ef --version $ver.*
-     fi
+getRemoteScript() {
+    instalIndex=$(($instalIndex+1))
+    filePath="$folder/install-$instalIndex.sh"
+	curl -L $1 -o $filePath
+    chmod +x $filePath
+    echo $filePath
+}
+installRemoteDebian() {
+	debianIndex=$(($debianIndex+1))
+    filePath="$folder/debian-$debianIndex.deb"
+	curl -L $1 -o $filePath
+    sudo apt install $filePath
+    rm -rf $filePath
+}
+# installers
+## single installers
+### shared installers
+singleInstall () {
+    appIndex=${#messages[@]}
+    appName=$2
+    appCommand=$1
+	read -p "Do u want to install '$appName'  (y/<any other key to skip>): " proceed
+    messages+=("Installing '$appName'...")
+    displayMessage
+	if [ "$proceed" == "y" ]; then
+        `$appCommand`
+      	source ~/.bashrc
+        messages[$appIndex]="Installed '$appName'"
+	else
+		messages[$appIndex]="Skiped '$appName'"
+	fi
+    displayMessage
+}
+singleAdminInstall () {
+    sudo apt update
+	sudo $@
+}
+singleAdminAptInstall () {
+    singleAdminInstall apt $@
+}
+### specific app installers
+installGit () {
+    singleAdminAptInstall git
+}
+installVSCode () {
+    installRemoteDebian https://vscode.download.prss.microsoft.com/dbazure/download/stable/17baf841131aa23349f217ca7c570c76ee87b957/code_1.99.3-1744761595_amd64.deb
+}
+dotNetVer="8.0"
+dotNetScript=""
+installDotnetVersion () {
+    `$dotNetScript --channel $dotNetVer`
+    read -p "Enter the version of ASP.NET Core version to install [(<Major>.<Minor>)|<press enter to skip>)]: ": dotNetVer
+}
+installDotnet () {
+    dotnetIndex=${#messages[@]}
+    dotNetScript=`getRemoteScript https://dot.net/v1/dotnet-install.sh`
+    installRemoteDebian https://dot.net/v1/dotnet-install.sh -o ./install-temp/dotnet-install.sh
+    while [ "$dotNetVer" != "" ]
+   	do
+		singleInstall installDotnetVersion ASP.net-core-$dotNetVer
+	done
+}
+installNVM () {
+    curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash
+	source .bashrc
+    nvm install 20.9.0
+}
+installPNPM () {
+    curl -fsSL https://get.pnpm.io/install.sh | sh -
 }
 #######
 cd ~
+displayMessage
 gs=(`groups`)
 isSudoer=0
 for g in ${gs[@]}
 do 
-    if [ "$g" == "sudo" ]; then isSudoer=1; fi
-    adminInstall
+    if [ "$g" == "sudo" ]; then isSudoer=0; fi
 done
 if [ $isSudoer -eq 1 ]
 then
-    read -p "Dotnet version: " ver
-    if [ "$ver" == "" ]; then ver="8"; fi
-    adminInstall
-else
-    userInstall
+    singleInstall installGit Git
+    singleInstall installVSCode VSCOde
 fi
+singleInstall installNVM NVM
+singleInstall installPNPM PNPM
+singleInstall installDotnet ASP.net-core
+
+
