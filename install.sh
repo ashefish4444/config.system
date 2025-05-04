@@ -17,12 +17,12 @@ showSeparator() {
 	echo "${separators[$index]}"
 }
 displayMessage() {
+	clear
     showSeparator 0
 	echo "Configuring system."
     showSeparator 2
     for m in ${messages[@]}
    	do
-		showSeparator 1
 		echo "$m"
 	done
 }
