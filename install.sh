@@ -3,9 +3,9 @@
 instalIndex=0
 debianIndex=0
 separators=(
-	"############################################################"
-	"============================================================"
-	"------------------------------------------------------------"
+	"###################################################"
+	"==================================================="
+	"---------------------------------------------------"
 )
 messages=()
 messagesSub=()
@@ -39,7 +39,7 @@ formatMessage() {
 	echo " $formattedMessage"
 }
 displayMessage() {
-	# clear
+	clear
     showSeparator 0
 	echo "Configuring system."
     showSeparator 2
@@ -139,11 +139,8 @@ installPNPM () {
 }
 #######
 cd ~
-currentMessage=`formatMessage 0 Installing "'app'..."`
-    echo $currentMessage
 displayMessage
 gs=(`groups`)
-echo ${gs[@]}
 isSudoer=0
 for g in ${gs[@]}
 do 
