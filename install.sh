@@ -16,15 +16,38 @@ showSeparator() {
 	index=$(($1+0))
 	echo "${separators[$index]}"
 }
+formatMessage() {
+    # x=$1
+    # formattedMessageLevel=$(($x+1))
+    formattedMessage=""
+    iam=0
+    while [ $iam -lt $(($1+0)) ]
+    do
+        formattedMessage="$formattedMessage####"
+        iam=$(($iam+1))
+    done
+    iam=0
+    for w in $@
+    do
+        if [ $iam -gt 0 ]
+        then
+            formattedMessage="$formattedMessage#$w"
+            iam=$(($iam+1))
+        fi
+        iam=$(($iam+1))
+    done
+	echo " $formattedMessage"
+}
 displayMessage() {
-	clear
+	# clear
     showSeparator 0
 	echo "Configuring system."
     showSeparator 2
     for m in ${messages[@]}
    	do
-		echo "$m"
+		echo "$m" | tr '#' ' '
 	done
+    showSeparator 1
 }
 getRemoteScript() {
     instalIndex=$(($instalIndex+1))
@@ -33,45 +56,63 @@ getRemoteScript() {
     chmod +x $filePath
     echo $filePath
 }
-installRemoteDebian() {
+getRemoteDebian() {
 	debianIndex=$(($debianIndex+1))
     filePath="$folder/debian-$debianIndex.deb"
 	curl -L $1 -o $filePath
-    sudo apt install $filePath
-    rm -rf $filePath
+    echo $filePath
 }
 # installers
-## single installers
+#single installers
 ### shared installers
 singleInstall () {
-    appIndex=${#messages[@]}
     appName=$2
     appCommand=$1
-	read -p "Do u want to install '$appName'  (y/<any other key to skip>): " proceed
-    messages+=("Installing '$appName'...")
+    currentMessage=`formatMessage $3 Installing "'$appName'..."`
+    messages+=($currentMessage)
+    currentMessageIndex=${#messages[@]}
     displayMessage
+	read -p "Do u want to install '$appName'  (y/<any other key to skip>): " proceed   
 	if [ "$proceed" == "y" ]; then
         `$appCommand`
       	source ~/.bashrc
-        messages[$appIndex]="Installed '$appName'"
+        messages[$currentMessageIndex]=`formatMessage "$3 Installed '$appName'"`
 	else
-		messages[$appIndex]="Skiped '$appName'"
+		messages[$currentMessageIndex]=`formatMessage "$3 Skipped '$appName'"`
 	fi
     displayMessage
 }
-singleAdminInstall () {
+singleAdminInstallWrapper () {
     sudo apt update
-	sudo $@
+    sudo apt upgrade
+	`$@`
+    sudo apt update
+    sudo apt upgrade
+}
+singleAdminInstall () {
+    singleAdminInstallWrapper sudo $@
 }
 singleAdminAptInstall () {
     singleAdminInstall apt $@
+}
+singleAdminDbpkInstall () {
+    singleAdminInstall dbpk -i $@
 }
 ### specific app installers
 installGit () {
     singleAdminAptInstall git
 }
 installVSCode () {
-    installRemoteDebian https://vscode.download.prss.microsoft.com/dbazure/download/stable/17baf841131aa23349f217ca7c570c76ee87b957/code_1.99.3-1744761595_amd64.deb
+    vscodeFilePath=`getRemoteDebian https://vscode.download.prss.microsoft.com/dbazure/download/stable/17baf841131aa23349f217ca7c570c76ee87b957/code_1.99.3-1744761595_amd64.deb`
+    singleAdminDbpkInstall $vscodeFilePath
+    sudo apt update
+    singleAdminAptInstall code
+}
+installChrome () {
+    sudo mkdir -p /etc/apt/sources.list.d
+    sudo echo 'deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main' > /etc/apt/sources.list.d/google-chrome.list
+    sudo wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+    singleAdminAptInstall google-chrome-stable
 }
 dotNetVer="8.0"
 dotNetScript=""
@@ -85,7 +126,7 @@ installDotnet () {
     installRemoteDebian https://dot.net/v1/dotnet-install.sh -o ./install-temp/dotnet-install.sh
     while [ "$dotNetVer" != "" ]
    	do
-		singleInstall installDotnetVersion ASP.net-core-$dotNetVer
+		singleInstall installDotnetVersion ASP.net-core-$dotNetVer 1
 	done
 }
 installNVM () {
@@ -98,20 +139,24 @@ installPNPM () {
 }
 #######
 cd ~
+currentMessage=`formatMessage 0 Installing "'app'..."`
+    echo $currentMessage
 displayMessage
 gs=(`groups`)
+echo ${gs[@]}
 isSudoer=0
 for g in ${gs[@]}
 do 
-    if [ "$g" == "sudo" ]; then isSudoer=0; fi
+    if [ "$g" == "sudo" ]; then isSudoer=1; fi
 done
 if [ $isSudoer -eq 1 ]
 then
-    singleInstall installGit Git
-    singleInstall installVSCode VSCOde
+    singleInstall installGit Git 0
+    singleInstall installVSCode VSCode 0
+    singleInstall installChrome Chrome 0
 fi
-singleInstall installNVM NVM
-singleInstall installPNPM PNPM
-singleInstall installDotnet ASP.net-core
+singleInstall installNVM NVM 0
+singleInstall installPNPM PNPM 0
+singleInstall installDotnet ASP.net-core 0
 
 
