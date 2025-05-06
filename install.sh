@@ -1,93 +1,162 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 #
-installDotnet="n";
-proceed="y"
-ver="8"
-list=()
-shouldExist=0
-#
-ckcd() {
-	list=()
-	for cmd in $@
- 	do
-		if [ $shouldExist -ne 0 ] && ! command -v $cmd $> /dev/null
-	 	then
-	  		echo "'$cmd' is not installed but required."
-     			proceed="n"
-	    	elif [ $shouldExist -eq 0 ] && !! command -v $cmd $> /dev/null
-	 	then
-	  		echo "'$cmd' is already installed but required."
-     			proceed="e"
-	    	fi
-     	done
+instalIndex=0
+debianIndex=0
+separators=(
+	"###################################################"
+	"==================================================="
+	"---------------------------------------------------"
+)
+messages=()
+messagesSub=()
+message=""
+parentFolder=".temp"
+folder="$parentFolder/af4-config-system"
+# helpers
+showSeparator() {
+	index=$(($1+0))
+	echo "${separators[$index]}"
 }
-## admin
-adminAppInstall () {
-    app=$@
-	if [ "$proceed" == "y" ]; then 
-		read -p "Do u want to continue installing '${app[@]}': " proceed
-		if [ "$proceed" == "y" ]; then
-			sudo apt install ${app[@]}
-   			sudo apt update
-      			source ~/.bashrc
-		fi	
-	fi	
+formatMessage() {
+    # x=$1
+    # formattedMessageLevel=$(($x+1))
+    formattedMessage=""
+    iam=0
+    while [ $iam -lt $(($1+0)) ]
+    do
+        formattedMessage="$formattedMessage####"
+        iam=$(($iam+1))
+    done
+    iam=0
+    for w in $@
+    do
+        if [ $iam -gt 0 ]
+        then
+            formattedMessage="$formattedMessage#$w"
+            iam=$(($iam+1))
+        fi
+        iam=$(($iam+1))
+    done
+	echo " $formattedMessage"
 }
-userAppInstall () {
-	app=$@
-	if [ "$proceed" == "y" ]; then 
-		echo "Installing ${app[@]}"
-		`${app[@]}`
-  		source ~/.bashrc
-		read -p "Continue: " proceed
-	fi	
-}
-#
-adminInstall () {
-	adminAppInstall git
-	adminAppInstall curl
-	adminAppInstall snap
-	sudo snap install --classic code
-	sudo apt update
- 	read -p "Do u want to install ASP.NET Core (y/n): ": installDotnet
-  	while [ "$installDotnet" != "y" ] && [ "$installDotnet" != "n" ]
+displayMessage() {
+	clear
+    showSeparator 0
+	echo "Configuring system."
+    showSeparator 2
+    for m in ${messages[@]}
    	do
-    	read -p "Invalid answer. Do u want to install ASP.NET Core (y/n): ": reply
+		echo "$m" | tr '#' ' '
 	done
-	if [ "$installDotnet" == "y" ]
-	then
-		adminAppInstall -y dotnet-sdk-$ver.0
-		adminAppInstall -y aspnetcore-runtime-$ver.0
-	fi
+    showSeparator 1
+    echo "Dotnet script $dotNetScript"
+    showSeparator 1
 }
-##
-userInstall () {
-    #
-    # node
-    userAppInstall curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash
-    userAppInstall nvm install node
-    #pnpm
-    userAppInstall curl -fsSL https://get.pnpm.io/install.sh | sh -
-    # dontnet tools
-    if [ "$installDotnet" == "y" ]
-    then
-    	userAppInstall dotnet tool update --global dotnet-ef --version $ver.*
-     fi
+getRemoteScript() {
+    instalIndex=$(($instalIndex+1))
+    filePath="$folder/install-$instalIndex.sh"
+	curl -L $1 -o $filePath
+    echo $filePath
+}
+getRemoteDebian() {
+	debianIndex=$(($debianIndex+1))
+    filePath="$folder/debian-$debianIndex.deb"
+	curl -L $1 -o $filePath
+    echo $filePath
+}
+# installers
+#single installers
+### shared installers
+singleAdminInstallWrapper () {
+    sudo apt update
+    sudo apt upgrade
+	`$@`
+    sudo apt update
+    sudo apt upgrade
+}
+singleAdminInstall () {
+    singleAdminInstallWrapper sudo $@
+}
+singleAdminAptInstall () {
+    singleAdminInstall apt $@
+}
+singleAdminDbpkInstall () {
+    singleAdminInstall dbpk -i $@
+}
+### specific app installers
+installCurl () {
+    singleAdminAptInstall curl
+}
+installGit () {
+    singleAdminAptInstall git
+}
+installVSCode () {
+    vscodeFilePath=`getRemoteDebian https://vscode.download.prss.microsoft.com/dbazure/download/stable/17baf841131aa23349f217ca7c570c76ee87b957/code_1.99.3-1744761595_amd64.deb`
+    singleAdminDbpkInstall $vscodeFilePath
+    sudo apt update
+    singleAdminAptInstall code
+}
+installChrome () {
+    sudo mkdir -p /etc/apt/sources.list.d
+    sudo echo 'deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main' > /etc/apt/sources.list.d/google-chrome.list
+    sudo wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+    singleAdminAptInstall google-chrome-stable
+}
+
+installDotnet () {
+    dotNetScript=`getRemoteScript https://dot.net/v1/dotnet-install.sh`
+    dotNetVer="8.0"    
+    while [ "$dotNetVer" != "" ]
+    do
+        bash $dotNetScript --channel $dotNetVer
+        source ~/.bashrc
+        dotnet tool update --global dotnet-ef --version $dotNetVer.*
+        read -p "Enter the version of ASP.NET Core version to install [(<Major>.<Minor>)|<press enter to skip>)]: ": dotNetVer
+    done
+}
+installNVM () {
+    curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash
+	source .bashrc
+    nvm install 20.9.0
+}
+installPNPM () {
+    curl -fsSL https://get.pnpm.io/install.sh | sh -
+}
+singleInstall () {
+    appName=$2
+    appCommand=$1
+    currentMessage=`formatMessage $3 Installing "'$appName'..."`
+    currentMessageIndex=${#messages[@]}
+    messages+=($currentMessage)
+    displayMessage
+	read -p "Do u want to install '$appName'  (y/<any other key to skip>): " proceed   
+	if [ "$proceed" == "y" ]; then
+        $appCommand
+      	source ~/.bashrc
+        currentMessage=`formatMessage $3 Installed "'$appName'"`
+	else
+		currentMessage=`formatMessage $3 Skipped "'$appName'"`
+	fi
+    messages[$currentMessageIndex]="$currentMessage"
+    displayMessage
 }
 #######
-cd ~
+displayMessage
 gs=(`groups`)
 isSudoer=0
 for g in ${gs[@]}
 do 
     if [ "$g" == "sudo" ]; then isSudoer=1; fi
-    adminInstall
 done
 if [ $isSudoer -eq 1 ]
 then
-    read -p "Dotnet version: " ver
-    if [ "$ver" == "" ]; then ver="8"; fi
-    adminInstall
-else
-    userInstall
+    singleInstall installCurl Curl 0
+    singleInstall installGit Git 0
+    singleInstall installVSCode VSCode 0
+    singleInstall installChrome Chrome 0
 fi
+singleInstall installNVM NVM 0
+singleInstall installPNPM PNPM 0
+singleInstall installDotnet ASP.net-core 0
+
+
