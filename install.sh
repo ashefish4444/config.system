@@ -56,7 +56,6 @@ getRemoteScript() {
     instalIndex=$(($instalIndex+1))
     filePath="$folder/install-$instalIndex.sh"
 	curl -L $1 -o $filePath
-    echo 
     echo $filePath
 }
 getRemoteDebian() {
@@ -106,7 +105,6 @@ installChrome () {
 
 installDotnet () {
     dotNetScript=`getRemoteScript https://dot.net/v1/dotnet-install.sh`
-    echo "script $dotNetScript"
     dotNetVer="8.0"    
     while [ "$dotNetVer" != "" ]
     do
