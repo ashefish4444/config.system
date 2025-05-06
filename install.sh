@@ -40,7 +40,7 @@ formatMessage() {
 	echo " $formattedMessage"
 }
 displayMessage() {
-	# clear
+	clear
     showSeparator 0
 	echo "Configuring system."
     showSeparator 2
