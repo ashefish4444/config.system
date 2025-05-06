@@ -144,10 +144,6 @@ singleInstall () {
 }
 #######
 displayMessage
-cd ~;
-rm -rf $folder
-mkdir $parentFolder
-mkdir $folder
 gs=(`groups`)
 isSudoer=0
 for g in ${gs[@]}
@@ -164,6 +160,5 @@ fi
 singleInstall installNVM NVM 0
 singleInstall installPNPM PNPM 0
 singleInstall installDotnet ASP.net-core 0
-rm -rf $folder
 
 
