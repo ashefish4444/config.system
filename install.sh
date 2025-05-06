@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 #
 instalIndex=0
 debianIndex=0
@@ -10,7 +10,8 @@ separators=(
 messages=()
 messagesSub=()
 message=""
-folder="./.temp/af4-config-system"
+parentFolder=".temp"
+folder="$parentFolder/af4-config-system"
 # helpers
 showSeparator() {
 	index=$(($1+0))
@@ -39,7 +40,7 @@ formatMessage() {
 	echo " $formattedMessage"
 }
 displayMessage() {
-	clear
+	# clear
     showSeparator 0
 	echo "Configuring system."
     showSeparator 2
@@ -48,12 +49,14 @@ displayMessage() {
 		echo "$m" | tr '#' ' '
 	done
     showSeparator 1
+    echo "Dotnet script $dotNetScript"
+    showSeparator 1
 }
 getRemoteScript() {
     instalIndex=$(($instalIndex+1))
     filePath="$folder/install-$instalIndex.sh"
 	curl -L $1 -o $filePath
-    chmod +x $filePath
+    echo 
     echo $filePath
 }
 getRemoteDebian() {
@@ -65,23 +68,6 @@ getRemoteDebian() {
 # installers
 #single installers
 ### shared installers
-singleInstall () {
-    appName=$2
-    appCommand=$1
-    currentMessage=`formatMessage $3 Installing "'$appName'..."`
-    messages+=($currentMessage)
-    currentMessageIndex=${#messages[@]}
-    displayMessage
-	read -p "Do u want to install '$appName'  (y/<any other key to skip>): " proceed   
-	if [ "$proceed" == "y" ]; then
-        `$appCommand`
-      	source ~/.bashrc
-        messages[$currentMessageIndex]=`formatMessage "$3 Installed '$appName'"`
-	else
-		messages[$currentMessageIndex]=`formatMessage "$3 Skipped '$appName'"`
-	fi
-    displayMessage
-}
 singleAdminInstallWrapper () {
     sudo apt update
     sudo apt upgrade
@@ -99,6 +85,9 @@ singleAdminDbpkInstall () {
     singleAdminInstall dbpk -i $@
 }
 ### specific app installers
+installCurl () {
+    singleAdminAptInstall curl
+}
 installGit () {
     singleAdminAptInstall git
 }
@@ -114,20 +103,18 @@ installChrome () {
     sudo wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
     singleAdminAptInstall google-chrome-stable
 }
-dotNetVer="8.0"
-dotNetScript=""
-installDotnetVersion () {
-    `$dotNetScript --channel $dotNetVer`
-    read -p "Enter the version of ASP.NET Core version to install [(<Major>.<Minor>)|<press enter to skip>)]: ": dotNetVer
-}
+
 installDotnet () {
-    dotnetIndex=${#messages[@]}
     dotNetScript=`getRemoteScript https://dot.net/v1/dotnet-install.sh`
-    installRemoteDebian https://dot.net/v1/dotnet-install.sh -o ./install-temp/dotnet-install.sh
+    echo "script $dotNetScript"
+    dotNetVer="8.0"    
     while [ "$dotNetVer" != "" ]
-   	do
-		singleInstall installDotnetVersion ASP.net-core-$dotNetVer 1
-	done
+    do
+        bash $dotNetScript --channel $dotNetVer
+        source ~/.bashrc
+        dotnet tool update --global dotnet-ef --version $dotNetVer.*
+        read -p "Enter the version of ASP.NET Core version to install [(<Major>.<Minor>)|<press enter to skip>)]: ": dotNetVer
+    done
 }
 installNVM () {
     curl https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash
@@ -137,9 +124,30 @@ installNVM () {
 installPNPM () {
     curl -fsSL https://get.pnpm.io/install.sh | sh -
 }
+singleInstall () {
+    appName=$2
+    appCommand=$1
+    currentMessage=`formatMessage $3 Installing "'$appName'..."`
+    currentMessageIndex=${#messages[@]}
+    messages+=($currentMessage)
+    displayMessage
+	read -p "Do u want to install '$appName'  (y/<any other key to skip>): " proceed   
+	if [ "$proceed" == "y" ]; then
+        $appCommand
+      	source ~/.bashrc
+        currentMessage=`formatMessage $3 Installed "'$appName'"`
+	else
+		currentMessage=`formatMessage $3 Skipped "'$appName'"`
+	fi
+    messages[$currentMessageIndex]="$currentMessage"
+    displayMessage
+}
 #######
-cd ~
 displayMessage
+cd ~;
+rm -rf $folder
+mkdir $parentFolder
+mkdir $folder
 gs=(`groups`)
 isSudoer=0
 for g in ${gs[@]}
@@ -148,6 +156,7 @@ do
 done
 if [ $isSudoer -eq 1 ]
 then
+    singleInstall installCurl Curl 0
     singleInstall installGit Git 0
     singleInstall installVSCode VSCode 0
     singleInstall installChrome Chrome 0
@@ -155,5 +164,6 @@ fi
 singleInstall installNVM NVM 0
 singleInstall installPNPM PNPM 0
 singleInstall installDotnet ASP.net-core 0
+rm -rf $folder
 
 
